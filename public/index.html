@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>白噪音 — 卡帶播放器</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #111; color: #eee;
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+  min-height: 100vh; display: flex; flex-direction: column;
+  align-items: center; justify-content: flex-start; padding: 2rem 1rem 3rem;
+}
+#login-screen {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; min-height: 80vh; gap: 1.5rem; text-align: center;
+}
+.login-title { font-size: 28px; font-weight: 600; color: #fff; }
+.login-sub { font-size: 15px; color: #888; line-height: 1.6; }
+.login-btn {
+  background: #FFC826; color: #000; border: none; border-radius: 30px;
+  padding: 14px 40px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 1rem;
+}
+#player-screen { display: none; width: 100%; max-width: 420px; }
+.tape-body {
+  background: #1a1a1a; border-radius: 18px; padding: 1.25rem 1.25rem 1rem;
+  border: 2px solid #2a2a2a; margin-bottom: 1rem;
+}
+.tape-label {
+  background: #FFC826; border-radius: 10px; padding: 0.6rem 0.9rem; margin-bottom: 1rem;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.tape-label-title { color: #000; font-weight: 600; font-size: 16px; }
+.tape-label-side { color: #000; font-size: 12px; opacity: 0.65; }
+.reels { display: flex; justify-content: center; gap: 2.5rem; margin: 0.75rem 0; }
+.reel-wrap { text-align: center; }
+.reel-label { font-size: 11px; color: #555; margin-top: 4px; }
+.now-playing { background: #222; border-radius: 10px; padding: 10px 12px; margin-bottom: 0.75rem; }
+.np-label { font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+.np-title { font-size: 15px; color: #eee; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.np-artist { font-size: 13px; color: #FFC826; }
+.progress-bg { background: #333; height: 3px; border-radius: 2px; margin: 8px 0 3px; overflow: hidden; }
+.progress-fill { background: #FFC826; height: 100%; width: 0%; border-radius: 2px; transition: width 0.5s linear; }
+.progress-times { display: flex; justify-content: space-between; font-size: 11px; color: #555; }
+.tape-controls { display: flex; justify-content: center; gap: 10px; margin: 0.75rem 0 0.25rem; align-items: center; }
+.ctrl-btn {
+  background: #2a2a2a; border: 1px solid #3a3a3a; color: #bbb;
+  border-radius: 50%; width: 44px; height: 44px; font-size: 17px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.play-btn {
+  background: #FFC826 !important; color: #000 !important;
+  border-color: #FFC826 !important; width: 54px !important; height: 54px !important; font-size: 22px !important;
+}
+.stopped-msg { text-align: center; font-size: 13px; color: #555; padding: 4px 0; display: none; }
+.side-tabs { display: flex; gap: 8px; margin-bottom: 0.75rem; }
+.side-tab {
+  flex: 1; padding: 8px 0; text-align: center;
+  background: #1a1a1a; border: 1px solid #333; border-radius: 8px;
+  color: #777; font-size: 14px; cursor: pointer;
+}
+.side-tab.active { background: #FFC826; color: #000; border-color: #FFC826; font-weight: 600; }
+.track-list { max-height: 280px; overflow-y: auto; }
+.track-item { display: flex; align-items: center; gap: 10px; padding: 8px 6px; border-radius: 6px; cursor: pointer; }
+.track-item.playing { background: #2a2200; }
+.track-num { width: 20px; text-align: right; font-size: 12px; color: #555; flex-shrink: 0; }
+.track-info { flex: 1; min-width: 0; }
+.track-name { font-size: 14px; color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.track-artist { font-size: 12px; color: #777; }
+.eq-icon { width: 14px; height: 14px; flex-shrink: 0; display: none; }
+.track-item.playing .eq-icon { display: block; }
+.track-item.playing .track-num { display: none; }
+#status-bar { font-size: 12px; color: #888; text-align: center; margin-top: 0.75rem; min-height: 18px; }
+#logout-btn {
+  margin-top: 1.5rem; background: transparent; border: 1px solid #333;
+  color: #555; border-radius: 20px; padding: 6px 18px;
+  font-size: 12px; cursor: pointer; display: block; margin-left: auto; margin-right: auto;
+}
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div style="font-size:52px;">📼</div>
+  <div class="login-title">白噪音</div>
+  <div class="login-sub">卡帶式 Spotify 播放器<br>A/B 兩面各 10 首，播完自動停止</div>
+  <button class="login-btn" onclick="doLogin()">用 Spotify 登入</button>
+</div>
+
+<div id="player-screen">
+  <div class="tape-body">
+    <div class="tape-label">
+      <div>
+        <div class="tape-label-title">白噪音</div>
+        <div class="tape-label-side" id="side-label">C-60 · A面</div>
+      </div>
+      <svg width="30" height="30" viewBox="0 0 30 30">
+        <circle cx="15" cy="15" r="13" fill="none" stroke="#000" stroke-width="1.5" opacity="0.4"/>
+        <circle cx="15" cy="15" r="4" fill="#000" opacity="0.4"/>
+      </svg>
+    </div>
+
+    <div class="reels">
+      <div class="reel-wrap">
+        <svg width="68" height="68" viewBox="0 0 68 68">
+          <circle cx="34" cy="34" r="32" fill="#111" stroke="#444" stroke-width="1.5"/>
+          <circle cx="34" cy="34" r="18" fill="none" stroke="#333" stroke-width="7"/>
+          <circle cx="34" cy="34" r="5" fill="#222" stroke="#555" stroke-width="1"/>
+          <g id="spokes-a">
+            <line x1="34" y1="16" x2="34" y2="28" stroke="#555" stroke-width="1.5"/>
+            <line x1="34" y1="40" x2="34" y2="52" stroke="#555" stroke-width="1.5"/>
+            <line x1="16" y1="34" x2="28" y2="34" stroke="#555" stroke-width="1.5"/>
+            <line x1="40" y1="34" x2="52" y2="34" stroke="#555" stroke-width="1.5"/>
+          </g>
+        </svg>
+        <div class="reel-label">A面</div>
+      </div>
+      <div class="reel-wrap">
+        <svg width="68" height="68" viewBox="0 0 68 68">
+          <circle cx="34" cy="34" r="32" fill="#111" stroke="#444" stroke-width="1.5"/>
+          <circle cx="34" cy="34" r="18" fill="none" stroke="#333" stroke-width="7"/>
+          <circle cx="34" cy="34" r="5" fill="#222" stroke="#555" stroke-width="1"/>
+          <g id="spokes-b">
+            <line x1="34" y1="16" x2="34" y2="28" stroke="#555" stroke-width="1.5"/>
+            <line x1="34" y1="40" x2="34" y2="52" stroke="#555" stroke-width="1.5"/>
+            <line x1="16" y1="34" x2="28" y2="34" stroke="#555" stroke-width="1.5"/>
+            <line x1="40" y1="34" x2="52" y2="34" stroke="#555" stroke-width="1.5"/>
+          </g>
+        </svg>
+        <div class="reel-label">B面</div>
+      </div>
+    </div>
+
+    <div class="now-playing">
+      <div class="np-label">目前播放</div>
+      <div class="np-title" id="np-title">尚未開始</div>
+      <div class="np-artist" id="np-artist">選擇曲目或按播放</div>
+      <div id="progress-wrap" style="display:none;">
+        <div class="progress-bg"><div class="progress-fill" id="progress-fill"></div></div>
+        <div class="progress-times"><span id="cur-time">0:00</span><span id="tot-time">0:00</span></div>
+      </div>
+    </div>
+
+    <div class="tape-controls">
+      <button class="ctrl-btn" onclick="prevTrack()">⏮</button>
+      <button class="ctrl-btn play-btn" id="btn-play" onclick="togglePlay()">▶</button>
+      <button class="ctrl-btn" onclick="nextTrack()">⏭</button>
+      <button class="ctrl-btn" onclick="stopAll()">⏹</button>
+    </div>
+    <div class="stopped-msg" id="stopped-msg">— 播放完畢，卡帶停止 —</div>
+  </div>
+
+  <div class="side-tabs">
+    <div class="side-tab active" id="tab-A" onclick="switchSide('A')">A 面</div>
+    <div class="side-tab" id="tab-B" onclick="switchSide('B')">B 面</div>
+  </div>
+  <div class="track-list" id="track-list"></div>
+  <div id="status-bar"></div>
+  <button id="logout-btn" onclick="logout()">登出</button>
+</div>
+
+<script>
+const CLIENT_ID   = 'b487a4d126584ea7a2cbdd1e5dc8afda';
+const REDIRECT    = window.location.origin + '/api/callback';
+const SCOPES      = 'user-read-playback-state user-modify-playback-state user-read-currently-playing playlist-read-private playlist-read-collaborative';
+const PLAYLIST_ID = '1ZDX6YFCKWzwJQzbakaueh';
+
+const TRACKS = { A: [], B: [] };
+let trackUris = { A: [], B: [] };
+let token = '', refreshToken = '', tokenExpiry = 0;
+let curSide = 'A', curIdx = -1, activeSide = 'A';
+let playing = false, stopped = false;
+let animId = null, angle = 0, pollInterval = null;
+
+function doLogin() {
+  window.location.href = 'https://accounts.spotify.com/authorize'
+    + '?client_id=' + CLIENT_ID
+    + '&response_type=code'
+    + '&redirect_uri=' + encodeURIComponent(REDIRECT)
+    + '&scope=' + encodeURIComponent(SCOPES)
+    + '&show_dialog=true';
+}
+
+function logout() { localStorage.clear(); window.location.href = '/'; }
+
+async function refreshAccessToken() {
+  const rt = localStorage.getItem('refresh_token');
+  if (!rt) return false;
+  const r = await fetch('/api/refresh', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: rt })
+  });
+  const d = await r.json();
+  if (d.access_token) {
+    token = d.access_token;
+    tokenExpiry = Date.now() + (d.expires_in || 3600) * 1000;
+    localStorage.setItem('access_token', token);
+    localStorage.setItem('token_expiry', tokenExpiry);
+    return true;
+  }
+  return false;
+}
+
+async function api(method, path, body) {
+  if (Date.now() > tokenExpiry - 60000) await refreshAccessToken();
+  const opts = { method, headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  return fetch('https://api.spotify.com/v1' + path, opts);
+}
+
+async function resolveAllTracks() {
+  setStatus('載入播放清單...');
+  try {
+    const r = await api('GET', '/playlists/' + PLAYLIST_ID + '/tracks?limit=20&fields=items(track(name,uri,artists))');
+    const d = await r.json();
+    const items = (d.items || []).filter(x => x.track && x.track.uri);
+    const all = items.map(x => ({ name: x.track.name, artist: x.track.artists[0].name, uri: x.track.uri }));
+    TRACKS.A = all.slice(0, 10);
+    TRACKS.B = all.slice(10, 20);
+    trackUris.A = TRACKS.A.map(t => t.uri);
+    trackUris.B = TRACKS.B.map(t => t.uri);
+    renderList();
+    setStatus('');
+  } catch (e) {
+    setStatus('載入失敗，請重新整理');
+  }
+}
+
+async function getDeviceId() {
+  const r = await api('GET', '/me/player/devices');
+  const d = await r.json();
+  const devs = d.devices || [];
+  const active = devs.find(x => x.is_active) || devs[0];
+  return active ? active.id : null;
+}
+
+async function playTrack(idx, side) {
+  const uri = trackUris[side] && trackUris[side][idx];
+  if (!uri) { setStatus('找不到此曲目'); return; }
+  activeSide = side; curIdx = idx; playing = true; stopped = false;
+  document.getElementById('stopped-msg').style.display = 'none';
+  document.getElementById('btn-play').textContent = '⏸';
+  document.getElementById('progress-wrap').style.display = 'block';
+  document.getElementById('np-title').textContent = TRACKS[side][idx].name;
+  document.getElementById('np-artist').textContent = TRACKS[side][idx].artist;
+  document.getElementById('side-label').textContent = 'C-60 · ' + side + '面';
+  updateSideTabs(); renderList(); startAnim(); startPoll();
+  const deviceId = await getDeviceId();
+  const body = { uris: [uri] };
+  if (deviceId) body.device_id = deviceId;
+  await api('PUT', '/me/player/play', body);
+}
+
+function startPoll() {
+  clearInterval(pollInterval);
+  pollInterval = setInterval(async () => {
+    if (!playing) return;
+    try {
+      const r = await api('GET', '/me/player/currently-playing');
+      if (r.status === 204) return;
+      const text = await r.text();
+      if (!text) return;
+      const d = JSON.parse(text);
+      if (!d || !d.item) return;
+      const elapsed = Math.floor(d.progress_ms / 1000);
+      const dur = Math.floor(d.item.duration_ms / 1000);
+      const pct = dur > 0 ? (elapsed / dur * 100) : 0;
+      document.getElementById('progress-fill').style.width = pct + '%';
+      document.getElementById('cur-time').textContent = fmt(elapsed);
+      document.getElementById('tot-time').textContent = fmt(dur);
+      if (!d.is_playing && elapsed > 0 && elapsed >= dur - 3) {
+        clearInterval(pollInterval);
+        onTrackEnd();
+      }
+    } catch(e) {}
+  }, 2000);
+}
+
+function onTrackEnd() {
+  if (curIdx + 1 < TRACKS[activeSide].length) playTrack(curIdx + 1, activeSide);
+  else stopAll(true);
+}
+
+async function togglePlay() {
+  if (stopped) { playTrack(Math.max(curIdx, 0), activeSide); return; }
+  if (curIdx === -1) { playTrack(0, curSide); return; }
+  if (playing) {
+    playing = false; stopAnim(); clearInterval(pollInterval);
+    document.getElementById('btn-play').textContent = '▶';
+    await api('PUT', '/me/player/pause');
+  } else {
+    playing = true; document.getElementById('btn-play').textContent = '⏸';
+    startAnim(); startPoll();
+    await api('PUT', '/me/player/play');
+  }
+}
+
+function prevTrack() { if (curIdx > 0) playTrack(curIdx - 1, activeSide); }
+function nextTrack() { if (curIdx + 1 < TRACKS[activeSide].length) playTrack(curIdx + 1, activeSide); }
+
+function stopAll(ended) {
+  clearInterval(pollInterval); stopAnim();
+  playing = false; stopped = true;
+  document.getElementById('btn-play').textContent = '▶';
+  document.getElementById('progress-wrap').style.display = 'none';
+  if (ended) {
+    document.getElementById('np-title').textContent = '播放完畢';
+    document.getElementById('np-artist').textContent = activeSide + '面已播完，卡帶停止';
+    document.getElementById('stopped-msg').style.display = 'block';
+  } else {
+    document.getElementById('np-title').textContent = '已停止';
+    document.getElementById('np-artist').textContent = '';
+    curIdx = -1;
+  }
+  api('PUT', '/me/player/pause').catch(() => {});
+  renderList();
+}
+
+function startAnim() {
+  stopAnim();
+  const spokes = document.getElementById('spokes-' + activeSide.toLowerCase());
+  function spin() {
+    if (!playing) return;
+    angle = (angle + 3) % 360;
+    spokes.setAttribute('transform', 'rotate(' + angle + ' 34 34)');
+    animId = requestAnimationFrame(spin);
+  }
+  animId = requestAnimationFrame(spin);
+}
+function stopAnim() { if (animId) cancelAnimationFrame(animId); animId = null; }
+
+function switchSide(s) { curSide = s; updateSideTabs(); renderList(); }
+function updateSideTabs() {
+  ['A', 'B'].forEach(s => {
+    document.getElementById('tab-' + s).className = 'side-tab' + (s === curSide ? ' active' : '');
+  });
+}
+
+function renderList() {
+  const list = document.getElementById('track-list');
+  list.innerHTML = '';
+  TRACKS[curSide].forEach((t, i) => {
+    const isP = curSide === activeSide && i === curIdx && playing;
+    const div = document.createElement('div');
+    div.className = 'track-item' + (isP ? ' playing' : '');
+    div.innerHTML = `<div class="track-num">${i + 1}</div>
+      <svg class="eq-icon" viewBox="0 0 14 14" fill="none">
+        <rect x="1" y="5" width="3" height="8" rx="1" fill="#FFC826"><animate attributeName="height" values="8;3;8" dur="0.8s" repeatCount="indefinite"/><animate attributeName="y" values="5;8;5" dur="0.8s" repeatCount="indefinite"/></rect>
+        <rect x="5.5" y="3" width="3" height="10" rx="1" fill="#FFC826"><animate attributeName="height" values="10;4;10" dur="1s" repeatCount="indefinite"/><animate attributeName="y" values="3;7;3" dur="1s" repeatCount="indefinite"/></rect>
+        <rect x="10" y="6" width="3" height="7" rx="1" fill="#FFC826"><animate attributeName="height" values="7;2;7" dur="0.7s" repeatCount="indefinite"/><animate attributeName="y" values="6;9;6" dur="0.7s" repeatCount="indefinite"/></rect>
+      </svg>
+      <div class="track-info"><div class="track-name">${t.name}</div><div class="track-artist">${t.artist}</div></div>`;
+    div.onclick = () => playTrack(i, curSide);
+    list.appendChild(div);
+  });
+}
+
+function fmt(s) { return Math.floor(s / 60) + ':' + (s % 60 < 10 ? '0' : '') + Math.floor(s % 60); }
+function setStatus(msg) { document.getElementById('status-bar').textContent = msg; }
+
+async function init() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('access_token')) {
+    token = params.get('access_token');
+    refreshToken = params.get('refresh_token') || '';
+    const exp = parseInt(params.get('expires_in') || '3600');
+    tokenExpiry = Date.now() + exp * 1000;
+    localStorage.setItem('access_token', token);
+    localStorage.setItem('refresh_token', refreshToken);
+    localStorage.setItem('token_expiry', tokenExpiry);
+    window.history.replaceState({}, '', '/');
+  } else {
+    token = localStorage.getItem('access_token') || '';
+    refreshToken = localStorage.getItem('refresh_token') || '';
+    tokenExpiry = parseInt(localStorage.getItem('token_expiry') || '0');
+  }
+  if (!token && !refreshToken) {
+    document.getElementById('login-screen').style.display = 'flex';
+    return;
+  }
+  if (Date.now() > tokenExpiry - 60000) {
+    const ok = await refreshAccessToken();
+    if (!ok) { document.getElementById('login-screen').style.display = 'flex'; return; }
+  }
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('player-screen').style.display = 'block';
+  renderList();
+  await resolveAllTracks();
+}
+
+init();
+</script>
+</body>
+</html>
