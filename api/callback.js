@@ -1,7 +1,7 @@
 export default async function handler(req, res) {
   const CLIENT_ID     = 'b487a4d126584ea7a2cbdd1e5dc8afda';
   const CLIENT_SECRET = 'ea06595d947f4a799aa45813cf7b9ca3';
-  const REDIRECT_URI  = process.env.REDIRECT_URI || 'https://your-app.vercel.app/api/callback';
+  const REDIRECT_URI  = 'https://spmc-one.vercel.app/api/callback';
 
   const code = req.query.code;
   if (!code) { res.status(400).send('Missing code'); return; }
